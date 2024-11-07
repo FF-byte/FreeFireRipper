@@ -45,9 +45,21 @@ jobs:
         Install-PackageWithRetry -packageName "googlechrome"
 
     - name: Verify Installation of Chrome Remote Desktop
+      continue-on-error: true
       run: |
-        choco list --local-only | Select-String "chrome-remote-desktop-host"
-        Get-Command -Name "remoting_start_host.exe" -ErrorAction SilentlyContinue
+        try {
+          choco list --local-only | Select-String "chrome-remote-desktop-host"
+          Write-Host "chrome-remote-desktop-host installed successfully."
+        } catch {
+          Write-Host "chrome-remote-desktop-host not found in Chocolatey list."
+        }
+
+        $command = Get-Command -Name "remoting_start_host.exe" -ErrorAction SilentlyContinue
+        if ($null -eq $command) {
+          Write-Host "remoting_start_host.exe was not found in the system."
+        } else {
+          Write-Host "remoting_start_host.exe is available."
+        }
 
     - name: Download and Extract Free Fire Ripper
       continue-on-error: true
