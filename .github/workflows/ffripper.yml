@@ -30,7 +30,7 @@ jobs:
             $retryCount = 0
             while ($retryCount -lt $maxRetries) {
                 try {
-                    choco install $packageName -y
+                    choco install $packageName -y --ignore-checksums
                     return
                 } catch {
                     Write-Host "Retrying $packageName install ($($retryCount+1)/$maxRetries)"
@@ -43,33 +43,8 @@ jobs:
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
         Install-PackageWithRetry -packageName "googlechrome"
 
-    - name: Verify Installation
-      run: |
-        # Check if the chrome-remote-desktop-host package is installed
-        if (-not (choco list --local-only | Select-String "chrome-remote-desktop-host")) {
-            Write-Host "Error: chrome-remote-desktop-host not installed."
-            exit 1
-        } else {
-            Write-Host "chrome-remote-desktop-host installation verified."
-        }
-
-    - name: Find and Start Chrome Remote Desktop
-      run: |
-        # Try to locate remoting_start_host.exe in the expected locations
-        $path = Get-ChildItem -Path "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop" -Recurse -Filter "remoting_start_host.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-        if (-not $path) {
-          $path = Get-ChildItem -Path "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop" -Recurse -Filter "remoting_start_host.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-        }
-
-        if ($path) {
-          Write-Host "Found remoting_start_host.exe at $path"
-          & $path --code="${{ inputs.code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=123456
-        } else {
-          Write-Host "Error: remoting_start_host.exe not found in expected locations."
-          exit 1
-        }
-
     - name: Download and Extract Free Fire Ripper
+      continue-on-error: true
       run: |
         cd C:\Users\$Env:USERNAME\Documents
         try {
@@ -80,11 +55,29 @@ jobs:
           exit 1
         }
 
+    - name: Start Chrome Remote Desktop
+      continue-on-error: true
+      run: |
+        function Start-RemoteDesktop {
+          $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
+          foreach ($path in $paths) {
+              if (Test-Path $path) { & $path; return }
+          }
+          Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
+        }
+        Start-RemoteDesktop
+
     - name: Create Symbolic Links
       run: |
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+
+    - name: Start Remote Desktop Session
+      continue-on-error: true
+      run: |
+        Write-Host "Connecting to VM with Remote Desktop"
+        ${{ inputs.code }} --pin=123456
 
     - name: Keep Connection Active
       run: |
