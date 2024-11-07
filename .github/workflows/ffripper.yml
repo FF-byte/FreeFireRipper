@@ -23,7 +23,6 @@ jobs:
         }
 
     - name: Install Necessary Packages
-      continue-on-error: true
       run: |
         function Install-PackageWithRetry {
             param ([string]$packageName)
@@ -39,30 +38,38 @@ jobs:
                     $retryCount++
                 }
             }
-            Write-Host "$packageName failed to install via Chocolatey."
+            throw "$packageName failed to install via Chocolatey after multiple attempts."
         }
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
         Install-PackageWithRetry -packageName "googlechrome"
 
-    - name: Verify Installation of Chrome Remote Desktop
-      continue-on-error: true
+    - name: Verify Installation
       run: |
-        try {
-          choco list --local-only | Select-String "chrome-remote-desktop-host"
-          Write-Host "chrome-remote-desktop-host installed successfully."
-        } catch {
-          Write-Host "chrome-remote-desktop-host not found in Chocolatey list."
+        # Check if the chrome-remote-desktop-host package is installed
+        if (-not (choco list --local-only | Select-String "chrome-remote-desktop-host")) {
+            Write-Host "Error: chrome-remote-desktop-host not installed."
+            exit 1
+        } else {
+            Write-Host "chrome-remote-desktop-host installation verified."
         }
 
-        $command = Get-Command -Name "remoting_start_host.exe" -ErrorAction SilentlyContinue
-        if ($null -eq $command) {
-          Write-Host "remoting_start_host.exe was not found in the system."
+    - name: Find and Start Chrome Remote Desktop
+      run: |
+        # Try to locate remoting_start_host.exe in the expected locations
+        $path = Get-ChildItem -Path "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop" -Recurse -Filter "remoting_start_host.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        if (-not $path) {
+          $path = Get-ChildItem -Path "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop" -Recurse -Filter "remoting_start_host.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        }
+
+        if ($path) {
+          Write-Host "Found remoting_start_host.exe at $path"
+          & $path --code="${{ inputs.code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=123456
         } else {
-          Write-Host "remoting_start_host.exe is available."
+          Write-Host "Error: remoting_start_host.exe not found in expected locations."
+          exit 1
         }
 
     - name: Download and Extract Free Fire Ripper
-      continue-on-error: true
       run: |
         cd C:\Users\$Env:USERNAME\Documents
         try {
@@ -72,23 +79,6 @@ jobs:
           Write-Host "Download or extraction failed."
           exit 1
         }
-
-    - name: Start Chrome Remote Desktop
-      continue-on-error: true
-      run: |
-        function Start-RemoteDesktop {
-          $path = Get-ChildItem -Path "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop" -Recurse -Filter "remoting_start_host.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $path) {
-            $path = Get-ChildItem -Path "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop" -Recurse -Filter "remoting_start_host.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          }
-          if ($path) {
-            Write-Host "Found Chrome Remote Desktop at $path"
-            & $path --code="${{ inputs.code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=123456
-          } else {
-            Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
-          }
-        }
-        Start-RemoteDesktop
 
     - name: Create Symbolic Links
       run: |
