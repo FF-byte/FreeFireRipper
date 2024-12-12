@@ -47,7 +47,7 @@ jobs:
             while ($retryCount -lt $maxRetries) {
                 try {
                     if (choco list --local-only | Select-String $packageName) {
-                        Write-Host "$packageName is already installed. Skipping..."
+                        Write-Host "$packageName is already installed. Skipping installation."
                         return
                     }
                     choco install $packageName -y --ignore-checksums
@@ -61,7 +61,11 @@ jobs:
             }
             Write-Host "$packageName failed to install after multiple attempts. Continuing..."
         }
+
+        # Install Chrome Remote Desktop if not already installed
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
+
+        # Install Google Chrome if not already installed
         Install-PackageWithRetry -packageName "googlechrome"
 
     - name: Download and Extract Free Fire Ripper
