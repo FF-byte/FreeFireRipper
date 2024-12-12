@@ -1,4 +1,4 @@
-name: SATURN LK LITE
+name: SATURN LK
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    - name: Check for Pending Reboots
+    - name: Reboot if Necessary
       run: |
         function Test-PendingReboot {
           $rebootRequired = (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") -or
@@ -37,6 +37,15 @@ jobs:
         }
         Test-PendingReboot
 
+    - name: Uninstall Existing Google Chrome
+      run: |
+        if (choco list --local-only | Select-String 'googlechrome') {
+          Write-Host "Uninstalling existing Google Chrome installation..."
+          choco uninstall googlechrome -y
+        } else {
+          Write-Host "Google Chrome is not installed. Skipping uninstallation."
+        }
+
     - name: Install Necessary Packages
       run: |
         function Install-PackageWithRetry {
@@ -49,7 +58,7 @@ jobs:
                         Write-Host "$packageName is already installed. Skipping..."
                         return
                     }
-                    choco install $packageName -y --ignore-checksums
+                    choco install $packageName -y --install-arguments="'/l*v c:\$packageName_msi_install.log'" --ignore-checksums
                     Write-Host "$packageName installed successfully."
                     return
                 } catch {
@@ -61,21 +70,7 @@ jobs:
             throw "$packageName failed to install via Chocolatey after multiple attempts."
         }
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
-        
-        # Handle Google Chrome Installation Separately
-        function Install-GoogleChrome {
-            try {
-                choco install googlechrome -y --install-arguments="'/l*v c:\GoogleChrome_msi_install.log'"
-            } catch {
-                Write-Host "Failed to install Google Chrome. Checking for existing installation."
-                if (Get-Command "chrome.exe" -ErrorAction SilentlyContinue) {
-                    Write-Host "Google Chrome is already installed. Proceeding..."
-                } else {
-                    throw "Google Chrome installation failed and no existing installation found."
-                }
-            }
-        }
-        Install-GoogleChrome
+        Install-PackageWithRetry -packageName "googlechrome"
 
     - name: Download and Extract Free Fire Ripper
       continue-on-error: true
