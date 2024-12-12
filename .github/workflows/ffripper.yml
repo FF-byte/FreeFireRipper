@@ -37,6 +37,18 @@ jobs:
         }
         Test-PendingReboot
 
+    - name: Force Reinstall Google Chrome
+      run: |
+        # Cleanup any residual files before installing
+        try {
+            choco uninstall googlechrome -y
+        } catch {
+            Write-Host "Google Chrome was not found, continuing."
+        }
+        # Reinstall Google Chrome
+        choco install googlechrome --force -y --ignore-checksums
+        Write-Host "Google Chrome reinstalled successfully."
+
     - name: Install Necessary Packages
       run: |
         function Install-PackageWithRetry {
@@ -61,7 +73,6 @@ jobs:
             throw "$packageName failed to install via Chocolatey after multiple attempts."
         }
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
-        Install-PackageWithRetry -packageName "googlechrome"
 
     - name: Check if Google Chrome is Installed
       run: |
@@ -69,7 +80,7 @@ jobs:
           Write-Host "Google Chrome is already installed. Skipping installation."
         } else {
           Write-Host "Google Chrome not found. Installing..."
-          choco install googlechrome -y --ignore-checksums
+          choco install googlechrome --force -y --ignore-checksums
         }
 
     - name: Download and Extract Free Fire Ripper
