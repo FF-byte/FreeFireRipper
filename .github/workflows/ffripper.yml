@@ -28,15 +28,13 @@ jobs:
             $rebootRequired = (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") -or
                               (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") -or
                               (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\PendingFileRenameOperations")
-            if ($rebootRequired) {
-                Write-Host "A reboot is required. Rebooting system."
-                Restart-Computer -Force
-                Start-Sleep -Seconds 120
-            } else {
-                Write-Host "No pending reboot detected."
-            }
+            return $rebootRequired
         }
-        Test-PendingReboot
+
+        if (Test-PendingReboot) {
+            Write-Host "A reboot is required. Please reboot the system and try again."
+            exit 1  # Exit if a reboot is needed
+        }
 
     - name: Install Necessary Packages
       run: |
@@ -50,7 +48,7 @@ jobs:
                         Write-Host "$packageName is already installed. Skipping installation."
                         return
                     }
-                    choco install $packageName -y --ignore-checksums
+                    choco install $packageName -y --ignore-checksums --install-arguments "'/l*v C:\path\to\log\GoogleChromeInstall.log'"
                     Write-Host "$packageName installed successfully."
                     return
                 } catch {
@@ -60,6 +58,14 @@ jobs:
                 }
             }
             Write-Host "$packageName failed to install after multiple attempts. Continuing..."
+        }
+
+        # Uninstall existing Google Chrome if present
+        $chromeUninstallPath = Get-WmiObject -Query "SELECT * FROM Win32_Product WHERE Name = 'Google Chrome'" | Select-Object -ExpandProperty IdentifyingNumber
+        if ($chromeUninstallPath) {
+            Write-Host "Uninstalling existing Google Chrome."
+            msiexec /x $chromeUninstallPath /quiet /norestart
+            Start-Sleep -Seconds 5
         }
 
         # Install Chrome Remote Desktop if not already installed
