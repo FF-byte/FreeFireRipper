@@ -14,13 +14,7 @@ jobs:
     timeout-minutes: 1440 # Adjusted timeout to 24 hours
 
     steps:
-    # Step 1: Reboot the System
-    - name: Reboot System
-      run: |
-        Write-Host "Rebooting system to ensure a clean environment..."
-        Restart-Computer -Force -Delay 5
-        Start-Sleep -Seconds 60
-
+    
     # Step 2: Log System Information
     - name: Log System Information
       run: |
