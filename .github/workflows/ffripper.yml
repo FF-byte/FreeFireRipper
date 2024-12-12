@@ -21,6 +21,7 @@ jobs:
         } catch {
           Write-Host "Failed to disable firewall. Continuing..."
         }
+
     - name: Check for Pending Reboots and Reboot if Necessary
       run: |
         function Test-PendingReboot {
@@ -36,31 +37,20 @@ jobs:
             }
         }
         Test-PendingReboot
+
     - name: Install Necessary Packages
       run: |
         function Install-PackageWithRetry {
-            param ([string]$packageName, [string]$packageUrl)
+            param ([string]$packageName)
             $maxRetries = 3
             $retryCount = 0
-            $logDirectory = "C:\Temp\ChromeInstallLogs"  # Specify a valid log directory
-            if (-not (Test-Path $logDirectory)) {
-                New-Item -ItemType Directory -Path $logDirectory -Force
-            }
-            
             while ($retryCount -lt $maxRetries) {
                 try {
-                    # Clear cached MSI installers and previous installation logs
-                    Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Temp\chocolatey\GoogleChrome\*" -Recurse -Force
-
-                    # Check if the package is already installed (skip if already installed)
                     if (choco list --local-only | Select-String $packageName) {
                         Write-Host "$packageName is already installed. Skipping installation."
                         return
                     }
-                    
-                    # Re-download package from URL if the source isn't available
-                    Write-Host "Downloading $packageName from source."
-                    choco install $packageName -y --ignore-checksums --install-arguments "'/l*v $logDirectory\GoogleChromeInstall.log'"
+                    choco install $packageName -y --ignore-checksums
                     Write-Host "$packageName installed successfully."
                     return
                 } catch {
@@ -71,21 +61,11 @@ jobs:
             }
             Write-Host "$packageName failed to install after multiple attempts. Continuing..."
         }
-
-        # Uninstall any existing Chrome installations first (to avoid conflicts)
-        $chromeUninstallPath = Get-WmiObject -Query "SELECT * FROM Win32_Product WHERE Name = 'Google Chrome'" | Select-Object -ExpandProperty IdentifyingNumber
-        if ($chromeUninstallPath) {
-            Write-Host "Uninstalling existing Google Chrome."
-            msiexec /x $chromeUninstallPath /quiet /norestart
-            Start-Sleep -Seconds 5
-        }
-
         # Install Chrome Remote Desktop if not already installed
-        Install-PackageWithRetry -packageName "chrome-remote-desktop-host" -packageUrl "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-
+        Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
         # Install Google Chrome if not already installed
-        Install-PackageWithRetry -packageName "googlechrome" -packageUrl "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-        
+        Install-PackageWithRetry -packageName "googlechrome"
+
     - name: Download and Extract Free Fire Ripper
       continue-on-error: true
       run: |
@@ -97,27 +77,33 @@ jobs:
           Write-Host "Download or extraction failed."
           exit 1
         }
+
     - name: Start Chrome Remote Desktop
       continue-on-error: true
       run: |
-        function Start-RemoteDesktop {
-          $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
-          foreach ($path in $paths) {
-              if (Test-Path $path) { & $path; return }
-          }
-          Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
+        Write-Host "Checking for Chrome Remote Desktop path: $Env:PROGRAMFILES(X86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+        $remotingHostPath = Join-Path $Env:PROGRAMFILES(X86) "Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+        Write-Host "Using Chrome Remote Desktop at: $remotingHostPath"
+        
+        if (Test-Path $remotingHostPath) {
+            Write-Host "Starting Chrome Remote Desktop."
+            & $remotingHostPath --code="4/0AanRRrtlVxapmg9s_XxN--l3rZbyGEW0bJFcAZEvIaZIeMmiPSOsLWbG6Ko2xZBor39Dyg" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=123456
+        } else {
+            Write-Host "Error: Chrome Remote Desktop host not found at $remotingHostPath"
         }
-        Start-RemoteDesktop
+
     - name: Create Symbolic Links
       run: |
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+
     - name: Start Remote Desktop Session
       continue-on-error: true
       run: |
         Write-Host "Connecting to VM with Remote Desktop"
         ${{ inputs.code }} --pin=123456
+
     - name: Keep Connection Active pay gorno 
       run: |
         $i = 43800
