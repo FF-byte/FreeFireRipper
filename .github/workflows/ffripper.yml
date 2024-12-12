@@ -37,6 +37,15 @@ jobs:
         }
         Test-PendingReboot
 
+    - name: Uninstall Existing Google Chrome (if any)
+      run: |
+        if (choco list --local-only | Select-String "googlechrome") {
+          Write-Host "Existing Google Chrome detected. Uninstalling..."
+          choco uninstall googlechrome -y
+        } else {
+          Write-Host "Google Chrome not installed. Proceeding..."
+        }
+
     - name: Install Necessary Packages
       run: |
         function Install-PackageWithRetry {
@@ -45,11 +54,7 @@ jobs:
             $retryCount = 0
             while ($retryCount -lt $maxRetries) {
                 try {
-                    if (choco list --local-only | Select-String $packageName) {
-                        Write-Host "$packageName is already installed. Skipping..."
-                        return
-                    }
-                    choco install $packageName -y --ignore-checksums
+                    choco install $packageName -y --ignore-checksums --install-arguments="'/l*v c:\$packageName-install.log'"
                     Write-Host "$packageName installed successfully."
                     return
                 } catch {
