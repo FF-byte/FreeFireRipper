@@ -22,18 +22,24 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    - name: Install Google Chrome (skip if already installed)
+    - name: Check if Google Chrome is Installed
       run: |
         $chromeInstalled = choco list --local-only | Select-String 'googlechrome'
         if ($chromeInstalled) {
           Write-Host "Google Chrome is already installed. Skipping installation."
         } else {
           Write-Host "Google Chrome not found. Installing..."
-          try {
-            choco install googlechrome --force -y --ignore-checksums
-          } catch {
-            Write-Host "Google Chrome installation failed, but continuing..."
-          }
+
+          # Direct link to Chrome standalone installer
+          $chromeInstallerUrl = "https://dl.google.com/chrome/install/131.0.6778.140/chrome_installer.exe"
+          $installerPath = "C:\Users\$Env:USERNAME\Downloads\chrome_installer.exe"
+          
+          # Download Chrome installer
+          Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $installerPath
+          
+          # Install Chrome silently
+          Start-Process -FilePath $installerPath -ArgumentList "/silent /install" -Wait
+          Write-Host "Google Chrome installed successfully."
         }
 
     - name: Install Necessary Packages
@@ -77,10 +83,17 @@ jobs:
       continue-on-error: true
       run: |
         function Start-RemoteDesktop {
-          $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
+          $paths = [
+            "C:\Program Files\Chrome Remote Desktop\chrome_remote_desktop_host.exe",
+            "C:\Program Files (x86)\Chrome Remote Desktop\chrome_remote_desktop_host.exe"
+          ]
           foreach ($path in $paths) {
-              if (Test-Path $path) { & $path; return }
+            if (Test-Path $path) {
+              Start-Process $path
+              Write-Host "Chrome Remote Desktop started."
+              return
+            }
           }
-          Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
+          Write-Host "Chrome Remote Desktop not found. Skipping..."
         }
         Start-RemoteDesktop
