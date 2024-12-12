@@ -39,7 +39,7 @@ jobs:
 
     - name: Uninstall Existing Google Chrome (if any)
       run: |
-        $chromeInstalled = choco list --local-only | Select-String "googlechrome" | ForEach-Object { $_ -ne $null }
+        $chromeInstalled = choco list --local-only | Where-Object { $_ -match "googlechrome" }
         if ($chromeInstalled) {
           Write-Host "Existing Google Chrome detected. Uninstalling..."
           choco uninstall googlechrome -y
