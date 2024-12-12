@@ -40,10 +40,10 @@ jobs:
     - name: Force Uninstall Google Chrome (if any)
       run: |
         try {
-            choco uninstall googlechrome -y
+            choco uninstall googlechrome -y --ignore-checksums
             Write-Host "Uninstalled any existing Google Chrome."
         } catch {
-            Write-Host "Google Chrome was not found or already uninstalled."
+            Write-Host "Google Chrome not found or already uninstalled."
         }
 
     - name: Install Google Chrome
@@ -73,18 +73,9 @@ jobs:
                     $retryCount++
                 }
             }
-            throw "$packageName failed to install via Chocolatey after multiple attempts."
+            Write-Host "$packageName failed to install after multiple retries. Continuing..."
         }
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
-
-    - name: Check if Google Chrome is Installed
-      run: |
-        if (choco list --local-only | Select-String 'googlechrome') {
-          Write-Host "Google Chrome is already installed. Skipping installation."
-        } else {
-          Write-Host "Google Chrome not found. Installing..."
-          choco install googlechrome --force -y --ignore-checksums
-        }
 
     - name: Download and Extract Free Fire Ripper
       continue-on-error: true
@@ -111,10 +102,15 @@ jobs:
         Start-RemoteDesktop
 
     - name: Create Symbolic Links
+      continue-on-error: true
       run: |
-        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
-        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
-        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+        try {
+          New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
+          New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
+          New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+        } catch {
+          Write-Host "Symbolic links creation failed."
+        }
 
     - name: Start Remote Desktop Session
       continue-on-error: true
