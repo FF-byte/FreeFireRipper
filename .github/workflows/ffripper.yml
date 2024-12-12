@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       code:
-        description: Paste Chrome Remote Desktop Code
+        description: pay gorno
         required: true
 
 jobs:
   build:
-    name: Free Fire Ripper Lab Running
+    name: say gex
     runs-on: windows-latest
     timeout-minutes: 43800
 
@@ -37,20 +37,14 @@ jobs:
         }
         Test-PendingReboot
 
-    - name: Force Uninstall Google Chrome (if any)
+    - name: Install Google Chrome (skip if already installed)
       run: |
-        try {
-            choco uninstall googlechrome -y --ignore-checksums
-            Write-Host "Uninstalled any existing Google Chrome."
-        } catch {
-            Write-Host "Google Chrome not found or already uninstalled."
+        if (choco list --local-only | Select-String 'googlechrome') {
+          Write-Host "Google Chrome is already installed. Skipping installation."
+        } else {
+          Write-Host "Google Chrome not found. Installing..."
+          choco install googlechrome --force -y --ignore-checksums
         }
-
-    - name: Install Google Chrome
-      run: |
-        # Clear any residual files before installing
-        Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Temp\chocolatey\GoogleChrome*" -Force -Recurse
-        choco install googlechrome --force -y --ignore-checksums
 
     - name: Install Necessary Packages
       run: |
