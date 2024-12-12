@@ -37,45 +37,32 @@ jobs:
     # Step 3: Install Chrome Remote Desktop
     - name: Install Chrome Remote Desktop
       run: |
-        function Install-ChocoPackage {
-            param (
-                [string]$PackageName,
-                [int]$MaxRetries = 3
-            )
-            $retry = 0
-            do {
-                try {
-                    Write-Host "Attempting to install $PackageName (Attempt $($retry + 1)/$MaxRetries)"
-                    choco install $PackageName -y --no-progress
-                    Write-Host "$PackageName installed successfully."
-                    return
-                } catch {
-                    Write-Host "Failed to install $PackageName. Retrying..."
-                    $retry++
-                    Start-Sleep -Seconds 10
-                }
-            } while ($retry -lt $MaxRetries)
-            Write-Host "Failed to install $PackageName after $MaxRetries attempts."
-            exit 1
-        }
-
-        Install-ChocoPackage -PackageName "chrome-remote-desktop-host"
+        choco install chrome-remote-desktop-host -y --no-progress
 
     # Step 4: Start Chrome Remote Desktop
     - name: Start Chrome Remote Desktop
       run: |
+        param (
+            [string]$authCode = "${{ github.event.inputs.code }}",
+            [string]$pin = "123456"
+        )
+
         function Start-RemoteDesktop {
-            $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
-            foreach ($path in $paths) {
+            $remotingExecutablePaths = @(
+                "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe",
+                "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+            )
+            foreach ($path in $remotingExecutablePaths) {
                 if (Test-Path $path) {
-                    & $path
+                    & $path --code=$authCode --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --pin=$pin
                     Write-Host "Chrome Remote Desktop started successfully."
                     return
                 }
             }
-            Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found. Exiting."
+            Write-Host "Chrome Remote Desktop executable not found. Exiting."
             exit 1
         }
+
         Start-RemoteDesktop
 
     # Step 5: Keep RDP Session Active
