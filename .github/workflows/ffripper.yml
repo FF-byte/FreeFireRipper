@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       code:
-        description: pay gorno 
+        description: pay gorno
         required: true
 
 jobs:
@@ -21,6 +21,7 @@ jobs:
         } catch {
           Write-Host "Failed to disable firewall. Continuing..."
         }
+
     - name: Check for Pending Reboots and Reboot if Necessary
       run: |
         function Test-PendingReboot {
@@ -36,93 +37,108 @@ jobs:
             }
         }
         Test-PendingReboot
-    - name: Install Necessary Packages
+
+    - name: Uninstall Existing Google Chrome
       run: |
-        function Install-PackageWithRetry {
-            param ([string]$packageName, [string]$packageUrl)
-            $maxRetries = 3
-            $retryCount = 0
-            $logDirectory = "C:\Temp\ChromeInstallLogs"  # Specify a valid log directory
-            if (-not (Test-Path $logDirectory)) {
-                New-Item -ItemType Directory -Path $logDirectory -Force
-            }
-            
-            while ($retryCount -lt $maxRetries) {
-                try {
-                    # Clear cached MSI installers and previous installation logs
-                    Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Temp\chocolatey\GoogleChrome\*" -Recurse -Force
-
-                    # Check if the package is already installed (skip if already installed)
-                    if (choco list --local-only | Select-String $packageName) {
-                        Write-Host "$packageName is already installed. Skipping installation."
-                        return
-                    }
-                    
-                    # Re-download package from URL if the source isn't available
-                    Write-Host "Downloading $packageName from source."
-                    choco install $packageName -y --ignore-checksums --install-arguments "'/l*v $logDirectory\GoogleChromeInstall.log'"
-                    Write-Host "$packageName installed successfully."
-                    return
-                } catch {
-                    Write-Host "Retrying $packageName install ($($retryCount+1)/$maxRetries)"
-                    Start-Sleep -Seconds 10
-                    $retryCount++
+        function Uninstall-Chrome {
+            try {
+                $chromeUninstallPath = Get-WmiObject -Query "SELECT * FROM Win32_Product WHERE Name = 'Google Chrome'" | Select-Object -ExpandProperty IdentifyingNumber
+                if ($chromeUninstallPath) {
+                    Write-Host "Uninstalling existing Google Chrome."
+                    msiexec /x $chromeUninstallPath /quiet /norestart
+                    Start-Sleep -Seconds 5
+                } else {
+                    Write-Host "Google Chrome not found in installed programs. Removing manually."
+                    Remove-Item -Path "C:\Program Files (x86)\Google\Chrome" -Recurse -Force
+                    Remove-Item -Path "C:\Program Files\Google\Chrome" -Recurse -Force
+                    Remove-Item -Path "C:\Users\$Env:USERNAME\AppData\Local\Google\Chrome" -Recurse -Force
+                    Remove-Item -Path "HKCU:\Software\Google\Chrome" -Recurse -ErrorAction SilentlyContinue
+                    Remove-Item -Path "HKLM:\SOFTWARE\Google\Chrome" -Recurse -ErrorAction SilentlyContinue
                 }
+            } catch {
+                Write-Host "Failed to uninstall Google Chrome."
             }
-            Write-Host "$packageName failed to install after multiple attempts. Continuing..."
         }
+        Uninstall-Chrome
 
-        # Uninstall any existing Chrome installations first (to avoid conflicts)
-        $chromeUninstallPath = Get-WmiObject -Query "SELECT * FROM Win32_Product WHERE Name = 'Google Chrome'" | Select-Object -ExpandProperty IdentifyingNumber
-        if ($chromeUninstallPath) {
-            Write-Host "Uninstalling existing Google Chrome."
-            msiexec /x $chromeUninstallPath /quiet /norestart
-            Start-Sleep -Seconds 5
+    - name: Install Chrome and Remote Desktop
+      run: |
+        choco upgrade chocolatey -y
+        function Install-Package {
+            param ([string]$packageName, [string]$packageUrl)
+            try {
+                if (choco list --local-only | Select-String $packageName) {
+                    Write-Host "$packageName is already installed. Skipping."
+                    return
+                }
+                Write-Host "Downloading and installing $packageName."
+                Invoke-WebRequest -Uri $packageUrl -OutFile "C:\Temp\$packageName.msi"
+                Start-Process "msiexec.exe" -ArgumentList "/i C:\Temp\$packageName.msi /quiet /norestart" -Wait
+            } catch {
+                Write-Host "Failed to install $packageName."
+            }
         }
+        Install-Package -packageName "chrome-remote-desktop-host" -packageUrl "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+        Install-Package -packageName "googlechrome" -packageUrl "https://dl.google.com/dl/edgedl/chrome/install/latest/googlechromestandaloneenterprise64.msi"
 
-        # Install Chrome Remote Desktop if not already installed
-        Install-PackageWithRetry -packageName "chrome-remote-desktop-host" -packageUrl "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-
-        # Install Google Chrome if not already installed
-        Install-PackageWithRetry -packageName "googlechrome" -packageUrl "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-        
     - name: Download and Extract Free Fire Ripper
       continue-on-error: true
       run: |
-        cd C:\Users\$Env:USERNAME\Documents
         try {
-          Invoke-WebRequest -Uri "https://drive.usercontent.google.com/download?id=11EUFz6hufNT1g56-CmOJw9_KxMERZxhe&export=download" -OutFile ffripper.zip
-          7z x ffripper.zip -y
+            $url = "https://drive.usercontent.google.com/download?id=11EUFz6hufNT1g56-CmOJw9_KxMERZxhe&export=download"
+            Invoke-WebRequest -Uri $url -OutFile "C:\Temp\ffripper.zip"
+            Expand-Archive -Path "C:\Temp\ffripper.zip" -DestinationPath "C:\Users\$Env:USERNAME\Documents"
         } catch {
-          Write-Host "Download or extraction failed."
-          exit 1
+            Write-Host "Failed to download or extract ffripper.zip."
         }
+
     - name: Start Chrome Remote Desktop
       continue-on-error: true
       run: |
         function Start-RemoteDesktop {
-          $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
-          foreach ($path in $paths) {
-              if (Test-Path $path) { & $path; return }
-          }
-          Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
+            $paths = @(
+                "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe",
+                "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe",
+                "${Env:LOCALAPPDATA}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+            )
+            foreach ($path in $paths) {
+                if (Test-Path $path) {
+                    & $path
+                    return
+                }
+            }
+            Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
         }
         Start-RemoteDesktop
+
     - name: Create Symbolic Links
       run: |
-        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
-        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
-        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+        function Create-Symlink {
+            param ($Target, $LinkPath)
+            if (Test-Path $Target) {
+                New-Item -ItemType SymbolicLink -Target $Target -Path $LinkPath -Force
+                Write-Host "Created symlink: $LinkPath -> $Target"
+            } else {
+                Write-Host "Target $Target does not exist. Skipping link creation."
+            }
+        }
+        Create-Symlink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -LinkPath "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
+        Create-Symlink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -LinkPath "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
+        Create-Symlink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -LinkPath "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+
     - name: Start Remote Desktop Session
       continue-on-error: true
       run: |
         Write-Host "Connecting to VM with Remote Desktop"
         ${{ inputs.code }} --pin=123456
-    - name: Keep Connection Active pay gorno 
+
+    - name: Keep Connection Active
       run: |
-        $i = 43800
-        do {
-            Write-Host $i
-            Start-Sleep 60
-            $i--
-        } while ($i -gt 0)
+        try {
+            for ($i = 43800; $i -gt 0; $i--) {
+                Write-Host "Keeping connection alive... Remaining: $i minutes"
+                Start-Sleep -Seconds 60
+            }
+        } catch {
+            Write-Host "Connection activity script interrupted."
+        }
