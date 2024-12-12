@@ -1,4 +1,4 @@
-name: SKIBIDI SIGMA 
+name: SATURN LK
 
 on:
   workflow_dispatch:
@@ -63,30 +63,13 @@ jobs:
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
         Install-PackageWithRetry -packageName "googlechrome"
 
-    - name: Check and Remove Existing Chrome Installation
+    - name: Check if Google Chrome is Installed
       run: |
-        try {
-            # Remove Chrome if it exists
-            $chromePaths = @(
-                "C:\Program Files (x86)\Google\Chrome",
-                "C:\Program Files\Google\Chrome",
-                "$Env:LOCALAPPDATA\Google\Chrome"
-            )
-            foreach ($path in $chromePaths) {
-                if (Test-Path $path) {
-                    Write-Host "Removing existing Chrome files at $path..."
-                    Remove-Item -Path $path -Recurse -Force -ErrorAction SilentlyContinue
-                }
-            }
-            
-            if (choco list --local-only | Select-String 'googlechrome') {
-                Write-Host "Uninstalling existing Google Chrome installation..."
-                choco uninstall googlechrome -y
-            } else {
-                Write-Host "Google Chrome is not installed. Skipping uninstallation."
-            }
-        } catch {
-            Write-Host "Chrome removal step failed, but continuing workflow."
+        if (choco list --local-only | Select-String 'googlechrome') {
+          Write-Host "Google Chrome is already installed. Skipping installation."
+        } else {
+          Write-Host "Google Chrome not found. Installing..."
+          choco install googlechrome -y --ignore-checksums
         }
 
     - name: Download and Extract Free Fire Ripper
