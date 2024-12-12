@@ -37,17 +37,20 @@ jobs:
         }
         Test-PendingReboot
 
-    - name: Force Reinstall Google Chrome
+    - name: Force Uninstall Google Chrome (if any)
       run: |
-        # Cleanup any residual files before installing
         try {
             choco uninstall googlechrome -y
+            Write-Host "Uninstalled any existing Google Chrome."
         } catch {
-            Write-Host "Google Chrome was not found, continuing."
+            Write-Host "Google Chrome was not found or already uninstalled."
         }
-        # Reinstall Google Chrome
+
+    - name: Install Google Chrome
+      run: |
+        # Clear any residual files before installing
+        Remove-Item -Path "C:\Users\runneradmin\AppData\Local\Temp\chocolatey\GoogleChrome*" -Force -Recurse
         choco install googlechrome --force -y --ignore-checksums
-        Write-Host "Google Chrome reinstalled successfully."
 
     - name: Install Necessary Packages
       run: |
