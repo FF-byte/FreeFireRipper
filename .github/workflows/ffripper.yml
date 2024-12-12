@@ -32,7 +32,7 @@ jobs:
           try {
             choco install googlechrome --force -y --ignore-checksums
           } catch {
-            Write-Host "Google Chrome installation failed, continuing..."
+            Write-Host "Google Chrome installation failed, but continuing..."
           }
         }
 
