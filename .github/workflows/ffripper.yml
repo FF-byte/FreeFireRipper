@@ -21,20 +21,23 @@ jobs:
         } catch {
           Write-Host "Failed to disable firewall. Continuing..."
         }
-    - name: Check for Pending Reboots
+
+    - name: Check for Pending Reboots and Reboot if Necessary
       run: |
         function Test-PendingReboot {
-          $rebootRequired = (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") -or
-                            (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") -or
-                            (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\PendingFileRenameOperations")
-          if ($rebootRequired) {
-            Write-Host "A reboot is required. Rebooting system."
-            Restart-Computer -Force
-          } else {
-            Write-Host "No pending reboot detected."
-          }
+            $rebootRequired = (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") -or
+                              (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") -or
+                              (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\PendingFileRenameOperations")
+            if ($rebootRequired) {
+                Write-Host "A reboot is required. Rebooting system."
+                Restart-Computer -Force
+                Start-Sleep -Seconds 120
+            } else {
+                Write-Host "No pending reboot detected."
+            }
         }
         Test-PendingReboot
+
     - name: Install Necessary Packages
       run: |
         function Install-PackageWithRetry {
@@ -56,10 +59,11 @@ jobs:
                     $retryCount++
                 }
             }
-            throw "$packageName failed to install via Chocolatey after multiple attempts."
+            Write-Host "$packageName failed to install after multiple attempts. Continuing..."
         }
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
         Install-PackageWithRetry -packageName "googlechrome"
+
     - name: Download and Extract Free Fire Ripper
       continue-on-error: true
       run: |
@@ -71,6 +75,7 @@ jobs:
           Write-Host "Download or extraction failed."
           exit 1
         }
+
     - name: Start Chrome Remote Desktop
       continue-on-error: true
       run: |
@@ -82,16 +87,19 @@ jobs:
           Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
         }
         Start-RemoteDesktop
+
     - name: Create Symbolic Links
       run: |
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+
     - name: Start Remote Desktop Session
       continue-on-error: true
       run: |
         Write-Host "Connecting to VM with Remote Desktop"
         ${{ inputs.code }} --pin=123456
+
     - name: Keep Connection Active
       run: |
         $i = 43800
