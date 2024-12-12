@@ -1,4 +1,4 @@
-name: SATURN LK
+name: SKIBIDI SIGMA 
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    - name: Reboot if Necessary
+    - name: Check for Pending Reboots
       run: |
         function Test-PendingReboot {
           $rebootRequired = (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") -or
@@ -37,15 +37,6 @@ jobs:
         }
         Test-PendingReboot
 
-    - name: Uninstall Existing Google Chrome
-      run: |
-        if (choco list --local-only | Select-String 'googlechrome') {
-          Write-Host "Uninstalling existing Google Chrome installation..."
-          choco uninstall googlechrome -y
-        } else {
-          Write-Host "Google Chrome is not installed. Skipping uninstallation."
-        }
-
     - name: Install Necessary Packages
       run: |
         function Install-PackageWithRetry {
@@ -58,7 +49,7 @@ jobs:
                         Write-Host "$packageName is already installed. Skipping..."
                         return
                     }
-                    choco install $packageName -y --install-arguments="'/l*v c:\$packageName_msi_install.log'" --ignore-checksums
+                    choco install $packageName -y --ignore-checksums
                     Write-Host "$packageName installed successfully."
                     return
                 } catch {
@@ -71,6 +62,32 @@ jobs:
         }
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
         Install-PackageWithRetry -packageName "googlechrome"
+
+    - name: Check and Remove Existing Chrome Installation
+      run: |
+        try {
+            # Remove Chrome if it exists
+            $chromePaths = @(
+                "C:\Program Files (x86)\Google\Chrome",
+                "C:\Program Files\Google\Chrome",
+                "$Env:LOCALAPPDATA\Google\Chrome"
+            )
+            foreach ($path in $chromePaths) {
+                if (Test-Path $path) {
+                    Write-Host "Removing existing Chrome files at $path..."
+                    Remove-Item -Path $path -Recurse -Force -ErrorAction SilentlyContinue
+                }
+            }
+            
+            if (choco list --local-only | Select-String 'googlechrome') {
+                Write-Host "Uninstalling existing Google Chrome installation..."
+                choco uninstall googlechrome -y
+            } else {
+                Write-Host "Google Chrome is not installed. Skipping uninstallation."
+            }
+        } catch {
+            Write-Host "Chrome removal step failed, but continuing workflow."
+        }
 
     - name: Download and Extract Free Fire Ripper
       continue-on-error: true
