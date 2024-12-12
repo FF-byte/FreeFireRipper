@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       code:
-        description: pay gorno
+        description: Enter the remote desktop code
         required: true
 
 jobs:
   build:
-    name: say gex
+    name: Set up RDP
     runs-on: windows-latest
     timeout-minutes: 43800
 
@@ -31,9 +31,8 @@ jobs:
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
             Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
         }
-        # Manually refresh environment variables
+        # Refresh environment variables
         $env:PATH = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-        Write-Host "Environment variables refreshed manually."
 
     # Step 3: Install Chrome Remote Desktop
     - name: Install Chrome Remote Desktop
@@ -57,75 +56,12 @@ jobs:
                 }
             } while ($retry -lt $MaxRetries)
             Write-Host "Failed to install $PackageName after $MaxRetries attempts."
+            exit 1
         }
 
         Install-ChocoPackage -PackageName "chrome-remote-desktop-host"
 
-    # Step 4: Cleanup Existing Chrome Installation
-    - name: Cleanup Existing Chrome Installation
-      run: |
-        try {
-            Write-Host "Checking for existing Google Chrome installation..."
-            if (Get-Command "chrome" -ErrorAction SilentlyContinue) {
-                Write-Host "Removing existing installation of Google Chrome."
-                choco uninstall googlechrome -y
-                Start-Sleep -Seconds 10
-            } else {
-                Write-Host "No existing Google Chrome installation detected."
-            }
-        } catch {
-            Write-Host "Failed to check/remove existing Google Chrome. Continuing..."
-        }
-
-    # Step 5: Install Google Chrome with Enhanced Logging
-    - name: Install Google Chrome
-      run: |
-        try {
-            Write-Host "Installing Google Chrome..."
-            choco install googlechrome -y --install-arguments="'/l*v c:\GoogleChromeInstall.log'"
-        } catch {
-            Write-Host "Chocolatey installation of Google Chrome failed. Retrying with manual MSI installation..."
-            Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/googlechromestandaloneenterprise64.msi" -OutFile "C:\googlechrome.msi"
-            msiexec /i "C:\googlechrome.msi" /quiet /norestart /l*v "C:\GoogleChromeManualInstall.log"
-        }
-
-    # Step 6: Verify Chrome Installation and Retry if Needed
-    - name: Verify Chrome Installation
-      run: |
-        if (!(Get-Command "chrome" -ErrorAction SilentlyContinue)) {
-            Write-Host "Google Chrome installation verification failed. Checking logs..."
-            if (Test-Path "C:\GoogleChromeInstall.log") {
-                $errorDetails = Get-Content "C:\GoogleChromeInstall.log" | Select-String "Return Value 3" -Context 0,10
-                Write-Host "Error details from MSI log: $($errorDetails.Context | Out-String)"
-            }
-            Write-Host "Re-attempting installation manually..."
-            msiexec /i "C:\googlechrome.msi" /quiet /norestart /l*v "C:\GoogleChromeRetryInstall.log"
-        } else {
-            Write-Host "Google Chrome is installed successfully."
-        }
-
-    # Step 7: Download and Extract Free Fire Ripper
-    - name: Download and Extract Free Fire Ripper
-      run: |
-        cd C:\Users\$Env:USERNAME\Documents
-        if (-not (Test-Path "ffripper.zip")) {
-            try {
-                Invoke-WebRequest -Uri "https://drive.usercontent.google.com/download?id=11EUFz6hufNT1g56-CmOJw9_KxMERZxhe&export=download" -OutFile ffripper.zip
-                Write-Host "Free Fire Ripper downloaded successfully."
-            } catch {
-                Write-Host "Failed to download Free Fire Ripper. Exiting."
-                exit 1
-            }
-        }
-        try {
-            7z x ffripper.zip -y
-            Write-Host "Extraction successful."
-        } catch {
-            Write-Host "Failed to extract Free Fire Ripper. Exiting."
-            exit 1
-        }
-
-    # Step 8: Start Chrome Remote Desktop
+    # Step 4: Start Chrome Remote Desktop
     - name: Start Chrome Remote Desktop
       run: |
         function Start-RemoteDesktop {
@@ -142,36 +78,12 @@ jobs:
         }
         Start-RemoteDesktop
 
-    # Step 9: Create Symbolic Links
-    - name: Create Symbolic Links
-      run: |
-        try {
-            New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
-            New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
-            New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
-            Write-Host "Symbolic links created successfully."
-        } catch {
-            Write-Host "Failed to create symbolic links. Exiting."
-            exit 1
-        }
-
-    # Step 10: Start Remote Desktop Session
-    - name: Start Remote Desktop Session
-      run: |
-        try {
-            Write-Host "Connecting to VM with Remote Desktop"
-            ${{ inputs.code }} --pin=123456
-        } catch {
-            Write-Host "Failed to start remote desktop session. Exiting."
-            exit 1
-        }
-
-    # Step 11: Keep Connection Active
-    - name: Keep Connection Active
+    # Step 5: Keep RDP Session Active
+    - name: Keep RDP Session Active
       run: |
         $i = 43800
         do {
-            Write-Host $i
-            Start-Sleep 60
+            Write-Host "Keeping session active. Remaining time: $i minutes."
+            Start-Sleep -Seconds 60
             $i--
         } while ($i -gt 0)
