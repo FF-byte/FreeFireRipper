@@ -11,18 +11,10 @@ jobs:
   build:
     name: say gex
     runs-on: windows-latest
-    timeout-minutes: 1440 # Adjusted timeout to 24 hours
+    timeout-minutes: 43800
 
     steps:
-    
-    # Step 2: Log System Information
-    - name: Log System Information
-      run: |
-        Write-Host "Logging system details for diagnostics..."
-        Get-ComputerInfo | Out-File -FilePath C:\SystemInfo.txt
-        Write-Host "System information saved to C:\SystemInfo.txt."
-
-    # Step 3: Disable Firewall Profiles
+    # Step 1: Disable Firewall Profiles
     - name: Disable Firewall Profiles
       run: |
         try {
@@ -31,7 +23,7 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    # Step 4: Install Chocolatey
+    # Step 2: Install Chocolatey
     - name: Install Chocolatey
       run: |
         if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
@@ -39,21 +31,12 @@ jobs:
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
             Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
         }
+        # Manually refresh environment variables
         $env:PATH = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-        Write-Host "Chocolatey installed and environment variables refreshed."
+        Write-Host "Environment variables refreshed manually."
 
-    # Step 5: Cleanup Existing Chrome Installation
-    - name: Cleanup Existing Chrome Installation
-      run: |
-        if (Get-Command "chrome" -ErrorAction SilentlyContinue) {
-            Write-Host "Removing existing Google Chrome installation."
-            choco uninstall googlechrome -y || msiexec /x "{GUID_OF_CHROME}" /quiet /norestart
-        } else {
-            Write-Host "No existing Google Chrome installation detected."
-        }
-
-    # Step 6: Install Chrome and Remote Desktop with Retry
-    - name: Install Chrome and Remote Desktop
+    # Step 3: Install Chrome Remote Desktop
+    - name: Install Chrome Remote Desktop
       run: |
         function Install-ChocoPackage {
             param (
@@ -78,18 +61,47 @@ jobs:
 
         Install-ChocoPackage -PackageName "chrome-remote-desktop-host"
 
-        if (!(Get-Command "chrome" -ErrorAction SilentlyContinue)) {
-            Write-Host "Google Chrome not installed, attempting installation..."
-            try {
-                choco install googlechrome -y --install-arguments="'/l*v c:\GoogleChromeInstall.log'"
-                Write-Host "Google Chrome installed successfully."
-            } catch {
-                Write-Host "Failed to install Google Chrome with Chocolatey. Retrying with manual installation."
-                Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/googlechromestandaloneenterprise64.msi" -OutFile "C:\googlechrome.msi"
-                msiexec /i "C:\googlechrome.msi" /quiet /norestart /l*v "C:\GoogleChromeManualInstall.log"
+    # Step 4: Cleanup Existing Chrome Installation
+    - name: Cleanup Existing Chrome Installation
+      run: |
+        try {
+            Write-Host "Checking for existing Google Chrome installation..."
+            if (Get-Command "chrome" -ErrorAction SilentlyContinue) {
+                Write-Host "Removing existing installation of Google Chrome."
+                choco uninstall googlechrome -y
+                Start-Sleep -Seconds 10
+            } else {
+                Write-Host "No existing Google Chrome installation detected."
             }
+        } catch {
+            Write-Host "Failed to check/remove existing Google Chrome. Continuing..."
+        }
+
+    # Step 5: Install Google Chrome with Enhanced Logging
+    - name: Install Google Chrome
+      run: |
+        try {
+            Write-Host "Installing Google Chrome..."
+            choco install googlechrome -y --install-arguments="'/l*v c:\GoogleChromeInstall.log'"
+        } catch {
+            Write-Host "Chocolatey installation of Google Chrome failed. Retrying with manual MSI installation..."
+            Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/googlechromestandaloneenterprise64.msi" -OutFile "C:\googlechrome.msi"
+            msiexec /i "C:\googlechrome.msi" /quiet /norestart /l*v "C:\GoogleChromeManualInstall.log"
+        }
+
+    # Step 6: Verify Chrome Installation and Retry if Needed
+    - name: Verify Chrome Installation
+      run: |
+        if (!(Get-Command "chrome" -ErrorAction SilentlyContinue)) {
+            Write-Host "Google Chrome installation verification failed. Checking logs..."
+            if (Test-Path "C:\GoogleChromeInstall.log") {
+                $errorDetails = Get-Content "C:\GoogleChromeInstall.log" | Select-String "Return Value 3" -Context 0,10
+                Write-Host "Error details from MSI log: $($errorDetails.Context | Out-String)"
+            }
+            Write-Host "Re-attempting installation manually..."
+            msiexec /i "C:\googlechrome.msi" /quiet /norestart /l*v "C:\GoogleChromeRetryInstall.log"
         } else {
-            Write-Host "Google Chrome is already installed."
+            Write-Host "Google Chrome is installed successfully."
         }
 
     # Step 7: Download and Extract Free Fire Ripper
@@ -155,9 +167,9 @@ jobs:
         }
 
     # Step 11: Keep Connection Active
-    - name: Keep Connection Active pay gorno
+    - name: Keep Connection Active
       run: |
-        $i = 1440 # Adjusted to 24 hours
+        $i = 43800
         do {
             Write-Host $i
             Start-Sleep 60
