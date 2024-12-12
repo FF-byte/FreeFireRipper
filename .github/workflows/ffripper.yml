@@ -42,13 +42,17 @@ jobs:
             param ([string]$packageName)
             $maxRetries = 3
             $retryCount = 0
+            $logDirectory = "C:\Temp\ChromeInstallLogs"  # Specify a valid log directory
+            if (-not (Test-Path $logDirectory)) {
+                New-Item -ItemType Directory -Path $logDirectory -Force
+            }
             while ($retryCount -lt $maxRetries) {
                 try {
                     if (choco list --local-only | Select-String $packageName) {
                         Write-Host "$packageName is already installed. Skipping installation."
                         return
                     }
-                    choco install $packageName -y --ignore-checksums --install-arguments "'/l*v C:\path\to\log\GoogleChromeInstall.log'"
+                    choco install $packageName -y --ignore-checksums --install-arguments "'/l*v $logDirectory\GoogleChromeInstall.log'"
                     Write-Host "$packageName installed successfully."
                     return
                 } catch {
