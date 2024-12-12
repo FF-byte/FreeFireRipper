@@ -38,48 +38,41 @@ jobs:
         }
         Test-PendingReboot
 
-    - name: Uninstall Existing Google Chrome
+    - name: Install Chocolatey and Refresh Environment
       run: |
-        function Uninstall-Chrome {
-            try {
-                $chromeUninstallPath = Get-WmiObject -Query "SELECT * FROM Win32_Product WHERE Name = 'Google Chrome'" | Select-Object -ExpandProperty IdentifyingNumber
-                if ($chromeUninstallPath) {
-                    Write-Host "Uninstalling existing Google Chrome."
-                    msiexec /x $chromeUninstallPath /quiet /norestart
-                    Start-Sleep -Seconds 5
-                } else {
-                    Write-Host "Google Chrome not found in installed programs. Removing manually."
-                    Remove-Item -Path "C:\Program Files (x86)\Google\Chrome" -Recurse -Force
-                    Remove-Item -Path "C:\Program Files\Google\Chrome" -Recurse -Force
-                    Remove-Item -Path "C:\Users\$Env:USERNAME\AppData\Local\Google\Chrome" -Recurse -Force
-                    Remove-Item -Path "HKCU:\Software\Google\Chrome" -Recurse -ErrorAction SilentlyContinue
-                    Remove-Item -Path "HKLM:\SOFTWARE\Google\Chrome" -Recurse -ErrorAction SilentlyContinue
-                }
-            } catch {
-                Write-Host "Failed to uninstall Google Chrome."
-            }
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
         }
-        Uninstall-Chrome
+        # Refresh the environment variables
+        refreshenv
 
-    - name: Install Chrome and Remote Desktop
+    - name: Install Chrome and Remote Desktop with Retry
       run: |
-        choco upgrade chocolatey -y
-        function Install-Package {
-            param ([string]$packageName, [string]$packageUrl)
-            try {
-                if (choco list --local-only | Select-String $packageName) {
-                    Write-Host "$packageName is already installed. Skipping."
+        function Install-ChocoPackage {
+            param (
+                [string]$PackageName,
+                [int]$MaxRetries = 3
+            )
+            $retry = 0
+            do {
+                try {
+                    Write-Host "Attempting to install $PackageName (Attempt $($retry + 1)/$MaxRetries)"
+                    choco install $PackageName -y --no-progress
+                    Write-Host "$PackageName installed successfully."
                     return
+                } catch {
+                    Write-Host "Failed to install $PackageName. Retrying..."
+                    $retry++
+                    Start-Sleep -Seconds 10
                 }
-                Write-Host "Downloading and installing $packageName."
-                Invoke-WebRequest -Uri $packageUrl -OutFile "C:\Temp\$packageName.msi"
-                Start-Process "msiexec.exe" -ArgumentList "/i C:\Temp\$packageName.msi /quiet /norestart" -Wait
-            } catch {
-                Write-Host "Failed to install $packageName."
-            }
+            } while ($retry -lt $MaxRetries)
+            Write-Host "Failed to install $PackageName after $MaxRetries attempts."
         }
-        Install-Package -packageName "chrome-remote-desktop-host" -packageUrl "https://dl.google.com/dl/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-        Install-Package -packageName "googlechrome" -packageUrl "https://dl.google.com/dl/edgedl/chrome/install/latest/googlechromestandaloneenterprise64.msi"
+
+        Install-ChocoPackage -PackageName "chrome-remote-desktop-host"
+        Install-ChocoPackage -PackageName "googlechrome"
 
     - name: Download and Extract Free Fire Ripper
       continue-on-error: true
