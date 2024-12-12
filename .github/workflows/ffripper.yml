@@ -22,31 +22,16 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    - name: Check for Pending Reboots and Reboot if Necessary
-      run: |
-        function Test-PendingReboot {
-            $rebootRequired = (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending") -or
-                              (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") -or
-                              (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\PendingFileRenameOperations")
-            if ($rebootRequired) {
-                Write-Host "A reboot is required. Rebooting system."
-                Restart-Computer -Force
-                Start-Sleep -Seconds 120
-            } else {
-                Write-Host "No pending reboot detected."
-            }
-        }
-        Test-PendingReboot
-
-    - name: Install Chocolatey and Refresh Environment
+    - name: Install Chocolatey
       run: |
         if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
             Set-ExecutionPolicy Bypass -Scope Process -Force
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
             Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
         }
-        # Refresh the environment variables
-        refreshenv
+        # Manually refresh environment variables
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+        Write-Host "Environment variables refreshed manually."
 
     - name: Install Chrome and Remote Desktop with Retry
       run: |
@@ -77,47 +62,32 @@ jobs:
     - name: Download and Extract Free Fire Ripper
       continue-on-error: true
       run: |
+        cd C:\Users\$Env:USERNAME\Documents
         try {
-            $url = "https://drive.usercontent.google.com/download?id=11EUFz6hufNT1g56-CmOJw9_KxMERZxhe&export=download"
-            Invoke-WebRequest -Uri $url -OutFile "C:\Temp\ffripper.zip"
-            Expand-Archive -Path "C:\Temp\ffripper.zip" -DestinationPath "C:\Users\$Env:USERNAME\Documents"
+          Invoke-WebRequest -Uri "https://drive.usercontent.google.com/download?id=11EUFz6hufNT1g56-CmOJw9_KxMERZxhe&export=download" -OutFile ffripper.zip
+          7z x ffripper.zip -y
         } catch {
-            Write-Host "Failed to download or extract ffripper.zip."
+          Write-Host "Download or extraction failed."
+          exit 1
         }
 
     - name: Start Chrome Remote Desktop
       continue-on-error: true
       run: |
         function Start-RemoteDesktop {
-            $paths = @(
-                "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe",
-                "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe",
-                "${Env:LOCALAPPDATA}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-            )
-            foreach ($path in $paths) {
-                if (Test-Path $path) {
-                    & $path
-                    return
-                }
-            }
-            Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
+          $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
+          foreach ($path in $paths) {
+              if (Test-Path $path) { & $path; return }
+          }
+          Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
         }
         Start-RemoteDesktop
 
     - name: Create Symbolic Links
       run: |
-        function Create-Symlink {
-            param ($Target, $LinkPath)
-            if (Test-Path $Target) {
-                New-Item -ItemType SymbolicLink -Target $Target -Path $LinkPath -Force
-                Write-Host "Created symlink: $LinkPath -> $Target"
-            } else {
-                Write-Host "Target $Target does not exist. Skipping link creation."
-            }
-        }
-        Create-Symlink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -LinkPath "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
-        Create-Symlink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -LinkPath "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
-        Create-Symlink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -LinkPath "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
 
     - name: Start Remote Desktop Session
       continue-on-error: true
@@ -125,13 +95,11 @@ jobs:
         Write-Host "Connecting to VM with Remote Desktop"
         ${{ inputs.code }} --pin=123456
 
-    - name: Keep Connection Active
+    - name: Keep Connection Active pay gorno 
       run: |
-        try {
-            for ($i = 43800; $i -gt 0; $i--) {
-                Write-Host "Keeping connection alive... Remaining: $i minutes"
-                Start-Sleep -Seconds 60
-            }
-        } catch {
-            Write-Host "Connection activity script interrupted."
-        }
+        $i = 43800
+        do {
+            Write-Host $i
+            Start-Sleep 60
+            $i--
+        } while ($i -gt 0)
