@@ -64,7 +64,6 @@ jobs:
 
         # Install Chrome Remote Desktop if not already installed
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
-
         # Install Google Chrome if not already installed
         Install-PackageWithRetry -packageName "googlechrome"
 
