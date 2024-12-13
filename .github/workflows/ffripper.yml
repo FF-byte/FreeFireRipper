@@ -22,6 +22,17 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
+    - name: Check and Remove Existing Chrome Installation
+      run: |
+        $chromePath = "C:\Program Files (x86)\Google\Chrome"
+        if (Test-Path $chromePath) {
+            Write-Host "Existing Chrome installation found. Backing it up."
+            Copy-Item -Path $chromePath -Destination "C:\Backup\Google\Chrome" -Recurse -Force
+            Remove-Item -Recurse -Force $chromePath
+        } else {
+            Write-Host "No existing Chrome installation found. Continuing..."
+        }
+
     - name: Install Necessary Packages
       run: |
         function Install-PackageWithRetry {
@@ -30,7 +41,7 @@ jobs:
             $retryCount = 0
             while ($retryCount -lt $maxRetries) {
                 try {
-                    choco install $packageName -y --ignore-checksums
+                    choco install $packageName -y --ignore-checksums --install-arguments="'/l*v c:\GoogleChrome_msi_install.log'"
                     return
                 } catch {
                     Write-Host "Retrying $packageName install ($($retryCount+1)/$maxRetries)"
