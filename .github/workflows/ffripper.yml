@@ -11,7 +11,7 @@ jobs:
   build:
     name: Free Fire Ripper Lab Running
     runs-on: windows-latest
-    timeout-minutes: 43800
+    timeout-minutes: 43800  # Allowing long runtime for RDP and other tasks
 
     steps:
     - name: Disable Firewall Profiles
@@ -30,32 +30,67 @@ jobs:
             Write-Host "Removed previous Chrome installation."
         }
 
-    - name: Install Necessary Packages
+    - name: Reboot System if Needed
       run: |
-        function Install-PackageWithRetry {
-            param ([string]$packageName)
-            $maxRetries = 3
-            $retryCount = 0
-            while ($retryCount -lt $maxRetries) {
-                try {
-                    # Check if the package is already installed
-                    if (Get-Command "chrome" -ErrorAction SilentlyContinue) {
-                        Write-Host "$packageName is already installed. Skipping installation."
-                        return
-                    }
+        shutdown.exe /r /f /t 0
 
-                    choco install $packageName -y --ignore-checksums --install-arguments "'/l*v C:\GoogleChrome_msi_install.log'"
-                    return
-                } catch {
-                    Write-Host "Retrying $packageName install ($($retryCount+1)/$maxRetries)"
-                    Start-Sleep -Seconds 10
-                    $retryCount++
-                }
-            }
-            throw "$packageName failed to install via Chocolatey after multiple attempts."
+    - name: Install Google Chrome with Retry
+      run: |
+        function Install-ChromeWithRetry {
+          param (
+            [string]$packageName
+          )
+          $maxRetries = 5
+          $retryCount = 0
+          $installSuccess = $false
+          
+          while ($retryCount -lt $maxRetries -and !$installSuccess) {
+              try {
+                  choco install $packageName -y --install-arguments "'/l*v C:\GoogleChrome_msi_install.log'"
+                  $installSuccess = $true
+                  Write-Host "$packageName installation succeeded."
+              } catch {
+                  Write-Host "Retrying $packageName installation ($($retryCount+1)/$maxRetries)."
+                  $retryCount++
+                  Start-Sleep -Seconds 30
+              }
+          }
+
+          if (!$installSuccess) {
+              throw "$packageName installation failed after $maxRetries retries."
+          }
         }
-        Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
-        Install-PackageWithRetry -packageName "googlechrome"
+
+        Install-ChromeWithRetry -packageName "googlechrome"
+
+    - name: Install Chrome Remote Desktop Host with Retry
+      run: |
+        function Install-CRDWithRetry {
+          param (
+            [string]$packageName
+          )
+          $maxRetries = 5
+          $retryCount = 0
+          $installSuccess = $false
+          
+          while ($retryCount -lt $maxRetries -and !$installSuccess) {
+              try {
+                  choco install $packageName -y --install-arguments "'/l*v C:\ChromeRemoteDesktop_msi_install.log'"
+                  $installSuccess = $true
+                  Write-Host "$packageName installation succeeded."
+              } catch {
+                  Write-Host "Retrying $packageName installation ($($retryCount+1)/$maxRetries)."
+                  $retryCount++
+                  Start-Sleep -Seconds 30
+              }
+          }
+
+          if (!$installSuccess) {
+              throw "$packageName installation failed after $maxRetries retries."
+          }
+        }
+
+        Install-CRDWithRetry -packageName "chrome-remote-desktop-host"
 
     - name: Download and Extract Free Fire Ripper
       continue-on-error: true
@@ -75,13 +110,18 @@ jobs:
         function Start-RemoteDesktop {
           $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
           foreach ($path in $paths) {
-              if (Test-Path $path) { & $path; return }
+              if (Test-Path $path) { 
+                  Write-Host "Starting Chrome Remote Desktop..."
+                  & $path --code="${{ inputs.code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=123456
+                  Write-Host "Chrome Remote Desktop started."
+                  return
+              }
           }
           Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
         }
         Start-RemoteDesktop
 
-    - name: Create Symbolic Links
+    - name: Create Symbolic Links for Ripper Tools
       run: |
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
         New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
@@ -97,7 +137,7 @@ jobs:
       run: |
         $i = 43800
         do {
-            Write-Host $i
+            Write-Host "Keeping RDP connection active for $i seconds."
             Start-Sleep 60
             $i--
         } while ($i -gt 0)
