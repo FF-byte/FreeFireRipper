@@ -22,92 +22,69 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    - name: Reboot Check
+    - name: Install Necessary Packages
       run: |
-        $pendingReboot = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending" -ErrorAction SilentlyContinue
-        if ($pendingReboot) {
-            Write-Host "Reboot is pending. Exiting to allow reboot."
-            exit 1
-        } else {
-            Write-Host "No reboot pending. Continuing..."
-        }
-
-    - name: Kill Chrome Processes
-      run: |
-        Stop-Process -Name "chrome" -Force -ErrorAction SilentlyContinue
-
-    - name: Check and Install Google Chrome
-      run: |
-        $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
-        if (Test-Path $chromePath) {
-            Write-Host "Google Chrome is already installed. Skipping installation."
-        } else {
-            Write-Host "Google Chrome not found. Installing Google Chrome..."
-            try {
-                $url = "https://dl.google.com/tag/s/appguid%3D%7B8A69D345-D564-463C-AFF1-A69D9E530F96%7D&iid%3D%7B3E36F08D-4E9F-84CD-E5D5-A434731B86BC%7D&lang%3Den&browser%3D4&usagestats%3D0&appname%3DGoogle%20Chrome&needsadmin%3Dtrue/edgedl/chrome/install/GoogleChromeStandaloneEnterprise64.msi"
-                $output = "C:\Temp\GoogleChrome.msi"
-                New-Item -ItemType Directory -Force -Path "C:\Temp" | Out-Null
-                Invoke-WebRequest -Uri $url -OutFile $output
-                Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $output /quiet /norestart" -Wait
-                Write-Host "Google Chrome installed successfully."
-            } catch {
-                Write-Host "Google Chrome installation failed. Exiting."
-                exit 1
-            }
-        }
-
-    - name: Check and Install Chrome Remote Desktop Host
-      run: |
-        $crdPath = "C:\Program Files (x86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-        if (Test-Path $crdPath) {
-            Write-Host "Chrome Remote Desktop Host is already installed. Skipping installation."
-        } else {
-            Write-Host "Installing Chrome Remote Desktop Host..."
-            try {
-                choco install chrome-remote-desktop-host -y --ignore-checksums --install-arguments="'/l*v c:\CRDInstall.log'"
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Chrome Remote Desktop Host installation failed with exit code $LASTEXITCODE."
+        function Install-PackageWithRetry {
+            param ([string]$packageName)
+            $maxRetries = 3
+            $retryCount = 0
+            while ($retryCount -lt $maxRetries) {
+                try {
+                    choco install $packageName -y --ignore-checksums
+                    return
+                } catch {
+                    Write-Host "Retrying $packageName install ($($retryCount+1)/$maxRetries)"
+                    Start-Sleep -Seconds 10
+                    $retryCount++
                 }
-                Write-Host "Chrome Remote Desktop Host installed successfully."
-            } catch {
-                Write-Host "Chrome Remote Desktop Host installation failed. Exiting."
-                exit 1
             }
+            throw "$packageName failed to install via Chocolatey after multiple attempts."
+        }
+        Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
+        Install-PackageWithRetry -packageName "googlechrome"
+
+    - name: Download and Extract Free Fire Ripper
+      continue-on-error: true
+      run: |
+        cd C:\Users\$Env:USERNAME\Documents
+        try {
+          Invoke-WebRequest -Uri "https://drive.usercontent.google.com/download?id=11EUFz6hufNT1g56-CmOJw9_KxMERZxhe&export=download" -OutFile ffripper.zip
+          7z x ffripper.zip -y
+        } catch {
+          Write-Host "Download or extraction failed."
+          exit 1
         }
 
     - name: Start Chrome Remote Desktop
+      continue-on-error: true
       run: |
-        $authCode = "${{ inputs.code }}"
-        $pin = "123456"  # Use a secure PIN here.
-        $redirectUrl = "https://remotedesktop.google.com/_/oauthredirect"
-        if (-not $authCode) {
-            Write-Host "Authentication code is missing. Please provide a valid code."
-            exit 1
+        function Start-RemoteDesktop {
+          $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
+          foreach ($path in $paths) {
+              if (Test-Path $path) { & $path; return }
+          }
+          Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
         }
-        $crdPath1 = "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-        $crdPath2 = "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-        $paths = @($crdPath1, $crdPath2)
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                Write-Host "Found executable at: $path"
-                Write-Host "Running: $path --code=$authCode --redirect-url=$redirectUrl --pin=$pin"
-                & $path --code=$authCode --redirect-url=$redirectUrl --pin=$pin
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Chrome Remote Desktop started successfully."
-                    exit 0
-                } else {
-                    Write-Host "Failed to start Chrome Remote Desktop. Exit code: $LASTEXITCODE"
-                }
-            }
-        }
-        Write-Host "Chrome Remote Desktop executable not found. Exiting."
-        exit 1
+        Start-RemoteDesktop
+
+    - name: Create Symbolic Links
+      run: |
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+
+    - name: Start Remote Desktop Session
+      continue-on-error: true
+      run: |
+        Write-Host "Connecting to VM with Remote Desktop"
+        ${{ inputs.code }} --pin=123456
 
     - name: Keep Connection Active
       run: |
-        $counter = 43800
+        $i = 43800
         do {
-            Write-Host "Keeping the connection alive... Remaining time: $counter minutes"
-            Start-Sleep -Seconds 60
-            $counter--
-        } while ($counter -gt 0)
+            Write-Host $i
+            Start-Sleep 60
+            $i--
+        } while ($i -gt 0)
+        
