@@ -22,6 +22,20 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
+    - name: Reboot Check
+      run: |
+        $pendingReboot = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending" -ErrorAction SilentlyContinue
+        if ($pendingReboot) {
+            Write-Host "Reboot is pending. Exiting to allow reboot."
+            exit 1
+        } else {
+            Write-Host "No reboot pending. Continuing..."
+        }
+
+    - name: Kill Chrome Processes
+      run: |
+        Stop-Process -Name "chrome" -Force -ErrorAction SilentlyContinue
+
     - name: Check and Install Google Chrome
       run: |
         $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
@@ -30,10 +44,11 @@ jobs:
         } else {
             Write-Host "Google Chrome not found. Installing Google Chrome..."
             try {
-                choco install googlechrome -y --ignore-checksums --install-arguments="'/l*v c:\GoogleChromeInstall.log'"
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Google Chrome installation failed with exit code $LASTEXITCODE."
-                }
+                $url = "https://dl.google.com/tag/s/appguid%3D%7B8A69D345-D564-463C-AFF1-A69D9E530F96%7D&iid%3D%7B3E36F08D-4E9F-84CD-E5D5-A434731B86BC%7D&lang%3Den&browser%3D4&usagestats%3D0&appname%3DGoogle%20Chrome&needsadmin%3Dtrue/edgedl/chrome/install/GoogleChromeStandaloneEnterprise64.msi"
+                $output = "C:\Temp\GoogleChrome.msi"
+                New-Item -ItemType Directory -Force -Path "C:\Temp" | Out-Null
+                Invoke-WebRequest -Uri $url -OutFile $output
+                Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $output /quiet /norestart" -Wait
                 Write-Host "Google Chrome installed successfully."
             } catch {
                 Write-Host "Google Chrome installation failed. Exiting."
@@ -65,19 +80,16 @@ jobs:
         $authCode = "${{ inputs.code }}"
         $pin = "123456"  # Use a secure PIN here.
         $redirectUrl = "https://remotedesktop.google.com/_/oauthredirect"
-
         if (-not $authCode) {
             Write-Host "Authentication code is missing. Please provide a valid code."
             exit 1
         }
-
         $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
         foreach ($path in $paths) {
             if (Test-Path $path) {
                 Write-Host "Found executable at: $path"
                 Write-Host "Running: $path --code=$authCode --redirect-url=$redirectUrl --pin=$pin"
                 & $path --code="$authCode" --redirect-url="$redirectUrl" --pin="$pin"
-
                 if ($LASTEXITCODE -eq 0) {
                     Write-Host "Chrome Remote Desktop started successfully."
                     exit 0
@@ -86,7 +98,6 @@ jobs:
                 }
             }
         }
-
         Write-Host "Chrome Remote Desktop executable not found. Exiting."
         exit 1
 
