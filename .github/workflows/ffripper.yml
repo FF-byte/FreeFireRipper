@@ -48,6 +48,7 @@ jobs:
         )
 
         function Start-RemoteDesktop {
+            # Correct path handling for both 32-bit and 64-bit installations
             $remotingExecutablePaths = @(
                 "$env:PROGRAMFILES(X86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe",
                 "$env:PROGRAMFILES\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
@@ -56,7 +57,7 @@ jobs:
             foreach ($path in $remotingExecutablePaths) {
                 if (Test-Path $path) {
                     Write-Host "Found executable at: $path"
-                    & $path --code=$authCode --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --pin=$pin
+                    & "$path" --code=$authCode --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --pin=$pin
                     Write-Host "Chrome Remote Desktop started successfully."
                     return
                 }
