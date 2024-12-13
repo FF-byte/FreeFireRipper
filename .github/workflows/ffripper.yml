@@ -84,12 +84,14 @@ jobs:
             Write-Host "Authentication code is missing. Please provide a valid code."
             exit 1
         }
-        $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
+        $crdPath1 = "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+        $crdPath2 = "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+        $paths = @($crdPath1, $crdPath2)
         foreach ($path in $paths) {
             if (Test-Path $path) {
                 Write-Host "Found executable at: $path"
                 Write-Host "Running: $path --code=$authCode --redirect-url=$redirectUrl --pin=$pin"
-                & $path --code="$authCode" --redirect-url="$redirectUrl" --pin="$pin"
+                & $path --code=$authCode --redirect-url=$redirectUrl --pin=$pin
                 if ($LASTEXITCODE -eq 0) {
                     Write-Host "Chrome Remote Desktop started successfully."
                     exit 0
