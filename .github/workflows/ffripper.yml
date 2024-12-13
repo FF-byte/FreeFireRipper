@@ -22,22 +22,6 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    - name: Backup Existing Chrome Installation
-      run: |
-        $chromePath = "C:\Program Files (x86)\Google\Chrome"
-        $backupPath = "C:\ChromeBackup"
-        if (Test-Path $chromePath) {
-            try {
-                Write-Host "Backing up existing Chrome installation..."
-                Copy-Item -Recurse -Force -Path $chromePath -Destination $backupPath
-                Write-Host "Backup completed at $backupPath."
-            } catch {
-                Write-Host "Failed to back up Chrome. Error: $_"
-            }
-        } else {
-            Write-Host "Chrome is not installed. Skipping backup."
-        }
-
     - name: Install Necessary Packages
       run: |
         function Install-PackageWithRetry {
@@ -59,30 +43,14 @@ jobs:
         Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
         Install-PackageWithRetry -packageName "googlechrome"
 
-    - name: Download and Extract Free Fire Ripper
-      continue-on-error: true
-      run: |
-        cd C:\Users\$Env:USERNAME\Documents
-        try {
-          Invoke-WebRequest -Uri "https://drive.usercontent.google.com/download?id=11EUFz6hufNT1g56-CmOJw9_KxMERZxhe&export=download" -OutFile ffripper.zip
-          7z x ffripper.zip -y
-        } catch {
-          Write-Host "Download or extraction failed."
-          exit 1
-        }
-
     - name: Start Chrome Remote Desktop
       run: |
         function Start-RemoteDesktop {
-          param (
-              [string]$code = "${{ inputs.code }}",
-              [string]$pin = "123456"
-          )
           $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
           foreach ($path in $paths) {
               if (Test-Path $path) {
-                  Write-Host "Starting Chrome Remote Desktop..."
-                  & $path --code=$code --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=$pin
+                  Write-Host "Found executable at: $path"
+                  & $path --code="${{ inputs.code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --pin=123456
                   Write-Host "Chrome Remote Desktop started successfully."
                   return
               }
@@ -92,17 +60,11 @@ jobs:
         }
         Start-RemoteDesktop
 
-    - name: Create Symbolic Links
-      run: |
-        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
-        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
-        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
-
     - name: Keep Connection Active
       run: |
-        $i = 43800
+        $counter = 43800
         do {
-            Write-Host $i
-            Start-Sleep 60
-            $i--
-        } while ($i -gt 0)
+            Write-Host "Keeping the connection alive... Remaining time: $counter minutes"
+            Start-Sleep -Seconds 60
+            $counter--
+        } while ($counter -gt 0)
