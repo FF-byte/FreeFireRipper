@@ -1,20 +1,19 @@
-name: SATURN LK
+name: FREE FIRE RIPPER
 
 on:
   workflow_dispatch:
     inputs:
       code:
-        description: Enter the remote desktop code
+        description: Paste Chrome Remote Desktop Code
         required: true
 
 jobs:
   build:
-    name: Set up RDP
+    name: Free Fire Ripper Lab Running
     runs-on: windows-latest
     timeout-minutes: 43800
 
     steps:
-    # Step 1: Disable Firewall Profiles
     - name: Disable Firewall Profiles
       run: |
         try {
@@ -23,57 +22,68 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    # Step 2: Install Chocolatey
-    - name: Install Chocolatey
+    - name: Install Necessary Packages
       run: |
-        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
-        }
-        # Refresh environment variables
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    # Step 3: Install Chrome Remote Desktop
-    - name: Install Chrome Remote Desktop
-      run: |
-        choco install chrome-remote-desktop-host -y --no-progress
-
-    # Step 4: Start Chrome Remote Desktop
-    - name: Start Chrome Remote Desktop
-      run: |
-        param (
-            [string]$authCode = "${{ github.event.inputs.code }}",
-            [string]$pin = "123456"
-        )
-
-        function Start-RemoteDesktop {
-            # Correct path handling for both 32-bit and 64-bit installations
-            $remotingExecutablePaths = @(
-                "$env:PROGRAMFILES(X86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe",
-                "$env:PROGRAMFILES\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-            )
-
-            foreach ($path in $remotingExecutablePaths) {
-                if (Test-Path $path) {
-                    Write-Host "Found executable at: $path"
-                    & "$path" --code=$authCode --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --pin=$pin
-                    Write-Host "Chrome Remote Desktop started successfully."
+        function Install-PackageWithRetry {
+            param ([string]$packageName)
+            $maxRetries = 3
+            $retryCount = 0
+            while ($retryCount -lt $maxRetries) {
+                try {
+                    choco install $packageName -y --ignore-checksums
                     return
+                } catch {
+                    Write-Host "Retrying $packageName install ($($retryCount+1)/$maxRetries)"
+                    Start-Sleep -Seconds 10
+                    $retryCount++
                 }
             }
-            Write-Host "Chrome Remote Desktop executable not found. Exiting."
-            exit 1
+            throw "$packageName failed to install via Chocolatey after multiple attempts."
+        }
+        Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
+        Install-PackageWithRetry -packageName "googlechrome"
+
+    - name: Download and Extract Free Fire Ripper
+      continue-on-error: true
+      run: |
+        cd C:\Users\$Env:USERNAME\Documents
+        try {
+          Invoke-WebRequest -Uri "https://drive.usercontent.google.com/download?id=11EUFz6hufNT1g56-CmOJw9_KxMERZxhe&export=download" -OutFile ffripper.zip
+          7z x ffripper.zip -y
+        } catch {
+          Write-Host "Download or extraction failed."
+          exit 1
         }
 
+    - name: Start Chrome Remote Desktop
+      continue-on-error: true
+      run: |
+        function Start-RemoteDesktop {
+          $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
+          foreach ($path in $paths) {
+              if (Test-Path $path) { & $path; return }
+          }
+          Write-Host "Chrome Remote Desktop's remoting_start_host.exe not found."
+        }
         Start-RemoteDesktop
 
-    # Step 5: Keep RDP Session Active
-    - name: Keep RDP Session Active
+    - name: Create Symbolic Links
+      run: |
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\FenixGaga\Engine\ProjectTitan.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Free Fire.lnk"
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\ninjaripper\x86\NinjaRipper.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Ninjaripper.lnk"
+        New-Item -ItemType SymbolicLink -Target "C:\Users\$Env:USERNAME\Documents\noesis\Noesis64.exe" -Path "C:\Users\$Env:USERNAME\Desktop\Noesis.lnk"
+
+    - name: Start Remote Desktop Session
+      continue-on-error: true
+      run: |
+        Write-Host "Connecting to VM with Remote Desktop"
+        & "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" --code="${{ inputs.code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name=$Env:COMPUTERNAME --pin=123456
+
+    - name: Keep Connection Active
       run: |
         $i = 43800
         do {
-            Write-Host "Keeping session active. Remaining time: $i minutes."
-            Start-Sleep -Seconds 60
+            Write-Host $i
+            Start-Sleep 60
             $i--
         } while ($i -gt 0)
