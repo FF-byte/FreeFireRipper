@@ -22,40 +22,71 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    - name: Check and Install Chrome If Needed
+    - name: Check and Install Google Chrome
       run: |
         $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromePath) {
-            Write-Host "Chrome is already installed. Using the current installation."
+            Write-Host "Google Chrome is already installed. Skipping installation."
         } else {
-            Write-Host "No Chrome installation found. Installing Google Chrome..."
-            choco install googlechrome -y --ignore-checksums --install-arguments="'/l*v c:\GoogleChromeInstall.log'"
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "Chrome installation failed. Exiting."
+            Write-Host "Google Chrome not found. Installing Google Chrome..."
+            try {
+                choco install googlechrome -y --ignore-checksums --install-arguments="'/l*v c:\GoogleChromeInstall.log'"
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Google Chrome installation failed with exit code $LASTEXITCODE."
+                }
+                Write-Host "Google Chrome installed successfully."
+            } catch {
+                Write-Host "Google Chrome installation failed. Exiting."
                 exit 1
             }
         }
-        Write-Host "Chrome is ready for use."
 
-    - name: Install Chrome Remote Desktop Host
+    - name: Check and Install Chrome Remote Desktop Host
       run: |
-        choco install chrome-remote-desktop-host -y --ignore-checksums --install-arguments="'/l*v c:\CRDInstall.log'"
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "Chrome Remote Desktop Host installation failed. Exiting."
-            exit 1
+        $crdPath = "C:\Program Files (x86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+        if (Test-Path $crdPath) {
+            Write-Host "Chrome Remote Desktop Host is already installed. Skipping installation."
+        } else {
+            Write-Host "Installing Chrome Remote Desktop Host..."
+            try {
+                choco install chrome-remote-desktop-host -y --ignore-checksums --install-arguments="'/l*v c:\CRDInstall.log'"
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Chrome Remote Desktop Host installation failed with exit code $LASTEXITCODE."
+                }
+                Write-Host "Chrome Remote Desktop Host installed successfully."
+            } catch {
+                Write-Host "Chrome Remote Desktop Host installation failed. Exiting."
+                exit 1
+            }
         }
 
     - name: Start Chrome Remote Desktop
       run: |
+        $authCode = "${{ inputs.code }}"
+        $pin = "123456"  # Use a secure PIN here.
+        $redirectUrl = "https://remotedesktop.google.com/_/oauthredirect"
+
+        if (-not $authCode) {
+            Write-Host "Authentication code is missing. Please provide a valid code."
+            exit 1
+        }
+
         $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
         foreach ($path in $paths) {
             if (Test-Path $path) {
                 Write-Host "Found executable at: $path"
-                & $path --code="${{ inputs.code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --pin=123456
-                Write-Host "Chrome Remote Desktop started successfully."
-                exit 0
+                Write-Host "Running: $path --code=$authCode --redirect-url=$redirectUrl --pin=$pin"
+                & $path --code="$authCode" --redirect-url="$redirectUrl" --pin="$pin"
+
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Chrome Remote Desktop started successfully."
+                    exit 0
+                } else {
+                    Write-Host "Failed to start Chrome Remote Desktop. Exit code: $LASTEXITCODE"
+                }
             }
         }
+
         Write-Host "Chrome Remote Desktop executable not found. Exiting."
         exit 1
 
