@@ -22,18 +22,20 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    - name: Check and Remove Existing Chrome Installation
+    - name: Check and Use Existing Chrome Installation
+      id: check_chrome
       run: |
-        $chromePath = "C:\Program Files (x86)\Google\Chrome"
+        $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromePath) {
-            Write-Host "Existing Chrome installation found. Backing it up."
-            Copy-Item -Path $chromePath -Destination "C:\Backup\Google\Chrome" -Recurse -Force
-            Remove-Item -Recurse -Force $chromePath
+            Write-Host "Existing Chrome installation found at $chromePath. Using this installation."
+            exit 0
         } else {
-            Write-Host "No existing Chrome installation found. Continuing..."
+            Write-Host "No existing Chrome installation found. Installation will proceed."
+            exit 1
         }
 
-    - name: Install Necessary Packages
+    - name: Install Necessary Packages (if Chrome not found)
+      if: steps.check_chrome.outcome == 'failure'
       run: |
         function Install-PackageWithRetry {
             param ([string]$packageName)
