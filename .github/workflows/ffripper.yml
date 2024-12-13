@@ -22,56 +22,42 @@ jobs:
           Write-Host "Failed to disable firewall. Continuing..."
         }
 
-    - name: Check and Use Existing Chrome Installation
-      id: check_chrome
+    - name: Check and Install Chrome If Needed
       run: |
         $chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
         if (Test-Path $chromePath) {
-            Write-Host "Existing Chrome installation found at $chromePath. Using this installation."
-            exit 0
+            Write-Host "Chrome is already installed. Using the current installation."
         } else {
-            Write-Host "No existing Chrome installation found. Installation will proceed."
+            Write-Host "No Chrome installation found. Installing Google Chrome..."
+            choco install googlechrome -y --ignore-checksums --install-arguments="'/l*v c:\GoogleChromeInstall.log'"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Chrome installation failed. Exiting."
+                exit 1
+            }
+        }
+        Write-Host "Chrome is ready for use."
+
+    - name: Install Chrome Remote Desktop Host
+      run: |
+        choco install chrome-remote-desktop-host -y --ignore-checksums --install-arguments="'/l*v c:\CRDInstall.log'"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Chrome Remote Desktop Host installation failed. Exiting."
             exit 1
         }
 
-    - name: Install Necessary Packages (if Chrome not found)
-      if: steps.check_chrome.outcome == 'failure'
-      run: |
-        function Install-PackageWithRetry {
-            param ([string]$packageName)
-            $maxRetries = 3
-            $retryCount = 0
-            while ($retryCount -lt $maxRetries) {
-                try {
-                    choco install $packageName -y --ignore-checksums --install-arguments="'/l*v c:\GoogleChrome_msi_install.log'"
-                    return
-                } catch {
-                    Write-Host "Retrying $packageName install ($($retryCount+1)/$maxRetries)"
-                    Start-Sleep -Seconds 10
-                    $retryCount++
-                }
-            }
-            throw "$packageName failed to install via Chocolatey after multiple attempts."
-        }
-        Install-PackageWithRetry -packageName "chrome-remote-desktop-host"
-        Install-PackageWithRetry -packageName "googlechrome"
-
     - name: Start Chrome Remote Desktop
       run: |
-        function Start-RemoteDesktop {
-          $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
-          foreach ($path in $paths) {
-              if (Test-Path $path) {
-                  Write-Host "Found executable at: $path"
-                  & $path --code="${{ inputs.code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --pin=123456
-                  Write-Host "Chrome Remote Desktop started successfully."
-                  return
-              }
-          }
-          Write-Host "Chrome Remote Desktop executable not found."
-          exit 1
+        $paths = @("${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", "${Env:PROGRAMFILES}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
+        foreach ($path in $paths) {
+            if (Test-Path $path) {
+                Write-Host "Found executable at: $path"
+                & $path --code="${{ inputs.code }}" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --pin=123456
+                Write-Host "Chrome Remote Desktop started successfully."
+                exit 0
+            }
         }
-        Start-RemoteDesktop
+        Write-Host "Chrome Remote Desktop executable not found. Exiting."
+        exit 1
 
     - name: Keep Connection Active
       run: |
